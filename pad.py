@@ -49,7 +49,7 @@ class MyModel(nn.Module):
 
 def train_collate_1(batch):
     tf = transforms.Compose(
-        [#transforms.Pad(2, fill=0),
+        [transforms.Pad(2, fill=0),
         transforms.ToTensor()
          ])
     return train_collate(batch, tf)
@@ -57,7 +57,7 @@ def train_collate_1(batch):
 
 def train_collate_2(batch):
     tf = transforms.Compose(
-        [#transforms.Pad(2, fill=0),
+        [transforms.Pad(2, fill=0),
         transforms.RandomHorizontalFlip(0.2),
          transforms.RandomVerticalFlip(0.2),
          transforms.RandomApply([transforms.RandomRotation(45)], 0.2),
@@ -69,15 +69,11 @@ def train_collate_2(batch):
 
 def train_collate_3(batch):
     tf = transforms.Compose(
-        [#transforms.Pad(2, fill=0),
+        [transforms.Pad(2, fill=0),
         transforms.RandomHorizontalFlip(0.3),
          transforms.RandomVerticalFlip(0.3),
-         transforms.RandomApply([transforms.RandomRotation(45)], 0.4),
+         transforms.RandomApply([transforms.RandomRotation(60)], 0.4),
          transforms.RandomApply([transforms.ColorJitter(0.6, 0.6, 0.6)], 0.4),
-         transforms.RandomApply([transforms.Compose([
-                    transforms.RandomCrop([24,24]),
-                    transforms.Resize([28,28])
-                ])], p=0.4),
          transforms.ToTensor()
          ])
     return train_collate(batch, tf)
@@ -100,7 +96,7 @@ def train_collate(batch, tf):
 
 def test_collate(batch):
     tf = transforms.Compose(
-        [transforms.ToTensor()])
+        [transforms.Pad(2, fill=0),transforms.ToTensor()])
     transform_data = []
     labels = []
     for (imgnp, label) in batch:
@@ -117,7 +113,7 @@ def test_collate(batch):
 
 def final_test_collate(batch):
     tf = transforms.Compose(
-        [transforms.ToTensor()])
+        [transforms.Pad(2, fill=0),transforms.ToTensor()])
     transform_data = []
     for imgnp in batch:
         imgnp = imgnp.reshape(28, 28)
@@ -143,7 +139,6 @@ def train_model(modelclass, train_data, train_label, threshold):
     last_stage_epoch = 0
 
     # 加载小批次数据，即将数据集中的data分成每组batch_size的小块，shuffle指定是否随机读取
-    # train_loader = Data.DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=train_collate_1)
     train_loader = Data.DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=train_collate_1)
     test_loader = Data.DataLoader(dataset=test_dataset, batch_size=BATCH_SIZE, shuffle=False, collate_fn=test_collate)
 
@@ -160,7 +155,7 @@ def train_model(modelclass, train_data, train_label, threshold):
         train_acc = 0  # 定义训练准确度
         model.train()  # 将网络转化为训练模式
         for i, (X, label) in enumerate(train_loader):  # 使用枚举函数遍历train_loader
-            X = X.view(-1, 1, 28, 28)  # X:[64,1,28,28] -> [64,784]将X向量展平
+            X = X.view(-1, 1, 32, 32)  # X:[64,1,28,28] -> [64,784]将X向量展平
             X = Variable(X).float().cuda()          #包装tensor用于自动求梯度
             label = Variable(label).long().cuda()
             out = model(X)  # 正向传播
@@ -186,7 +181,7 @@ def train_model(modelclass, train_data, train_label, threshold):
         model.eval()
         test_acc = 0
         for i, (X, label) in enumerate(test_loader):
-            X = X.view(-1, 1, 28, 28)
+            X = X.view(-1, 1, 32, 32)
             X = Variable(X).float().cuda()
             label = Variable(label).long().cuda()
             testout = model(X)
@@ -201,7 +196,7 @@ def train_model(modelclass, train_data, train_label, threshold):
             best_test_acc = test_acc
             best_epoch_num = epoch
 
-        if (newacc > test_acc and test_acc > 0.8 + train_stage*0.04) or epoch - last_stage_epoch > 8:
+        if (newacc > test_acc and test_acc > 0.8 + train_stage*0.04) or epoch - last_stage_epoch > 15:
             train_stage += 1
             print("train stage changed: "+str(train_stage))
             epoch = best_epoch_num
@@ -214,7 +209,7 @@ def train_model(modelclass, train_data, train_label, threshold):
                 lr = lr / 5
                 optimizer = optim.SGD(model.parameters(), lr=lr)
             elif train_stage == 3:
-                lr = lr / 5
+                lr = lr / 2
                 optimizer = optim.SGD(model.parameters(), lr=lr)
                 new_train_collate = train_collate_3
             else:
@@ -305,8 +300,7 @@ if __name__ == "__main__":
     train_label = numpy.array(origin_train_label)
 
     from googlenet import googlenet
-    from densenet import densenet121, densenet161, densenet169
-    model = train_model(densenet161, train_data, train_label, 0.95)
+    model = train_model(resnet34, train_data, train_label, 0.95)
     # model = continue_train_model(resnet34, 1,9,train_data,train_label,0,4)
 
     test_data = numpy.load("./data/test.npy")
@@ -316,7 +310,7 @@ if __name__ == "__main__":
         csv_writer = csv.writer(csvfile)
         csv_writer.writerow(['image_id', 'label'])
         for X in final_test_loader:
-            X = X.view(-1, 1, 28, 28)
+            X = X.view(-1, 1, 32, 32)
             X = Variable(X).float().cuda()
             testout = model(X)
             _, pred = testout.max(1)
